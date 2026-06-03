@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { XeroService } from '../services/xero';
+import { XeroService } from '../services/xero.js';
+import { TransactionService } from '../services/transactions.js';
 
 const router = Router();
 
@@ -21,10 +22,12 @@ router.get('/callback', async (req, res) => {
   }
 });
 
-router.post('/refresh/:tenantId', async (req, res) => {
+router.post('/sync/:tenantId', async (req, res) => {
   try {
-    const tokenSet = await XeroService.refreshToken(req.params.tenantId);
-    res.json({ message: 'Token refreshed', tokenSet });
+    const count = await TransactionService.syncTransactions(
+      req.params.tenantId,
+    );
+    res.json({ message: `Successfully synced ${count} transactions` });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

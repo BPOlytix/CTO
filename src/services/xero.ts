@@ -1,6 +1,6 @@
 import { XeroClient, TokenSet } from 'xero-node';
-import { xeroConfig } from '../config/xero';
-import { query } from '../utils/db';
+import { xeroConfig } from '../config/xero.js';
+import { query } from '../utils/db.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const xero = new XeroClient(xeroConfig);
@@ -44,7 +44,7 @@ export class XeroService {
     }
   }
 
-  static async refreshToken(tenantId: string) {
+  static async getClient(tenantId: string) {
     const connection = query(
       `SELECT * FROM xero_connections WHERE tenant_id = '${tenantId}'`,
     );
@@ -60,12 +60,17 @@ export class XeroService {
     });
 
     xero.setTokenSet(tokenSet);
-    const newTokenSet = await xero.refreshWithRefreshToken(
-      xeroConfig.clientId,
-      xeroConfig.clientSecret,
-      connection[0].refresh_token,
-    );
-    await this.saveTokenSet(newTokenSet, tenantId);
-    return newTokenSet;
+
+    // Refresh if expired (or close to expiring)
+    if (tokenSet.expired()) {
+      const newTokenSet = await xero.refreshWithRefreshToken(
+        xeroConfig.clientId,
+        xeroConfig.clientSecret,
+        connection[0].refresh_token,
+      );
+      await this.saveTokenSet(newTokenSet, tenantId);
+    }
+
+    return xero;
   }
 }

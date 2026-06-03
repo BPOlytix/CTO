@@ -1,5 +1,5 @@
 import express from 'express';
-import xeroRouter from './api/xero';
+import xeroRouter from './api/xero.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
