@@ -35,3 +35,13 @@ CREATE TABLE IF NOT EXISTS gaap_mapping_rules (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS bank_reconciliation_logs (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL,
+  rule_id TEXT NOT NULL,
+  confidence_score DECIMAL(5, 2),
+  reconciled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  supporting_docs TEXT, -- JSON array of links
+  FOREIGN KEY (transaction_id) REFERENCES transactions(id)
+);

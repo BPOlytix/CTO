@@ -12,16 +12,18 @@ export class XeroService {
 
   static async handleCallback(url: string) {
     const tokenSet = await xero.apiCallback(url);
-    await this.saveTokenSet(tokenSet);
+    const tenants = await xero.updateTenants();
+    const activeTenantId = tenants[0]?.tenantId || '';
+    await this.saveTokenSet(tokenSet, activeTenantId);
     return tokenSet;
   }
 
-  static async saveTokenSet(tokenSet: TokenSet) {
-    const tenantId = tokenSet.activeTenantId || ''; // This might need more logic to get the right tenant
+  static async saveTokenSet(tokenSet: TokenSet, tenantId?: string) {
+    const activeTenantId = tokenSet.activeTenantId || tenantId || '';
 
-    // For simplicity, we'll use a fixed ID or lookup by tenantId
+    // For simplicity, we'll use a fixed ID or lookup by activeTenantId
     const existing = query(
-      `SELECT id FROM xero_connections WHERE tenant_id = '${tenantId}'`,
+      `SELECT id FROM xero_connections WHERE tenant_id = '${activeTenantId}'`,
     );
 
     const expiresAt = new Date(
@@ -34,11 +36,11 @@ export class XeroService {
         refresh_token = '${tokenSet.refresh_token}', 
         expires_at = '${expiresAt}',
         updated_at = CURRENT_TIMESTAMP
-        WHERE tenant_id = '${tenantId}'`);
+        WHERE tenant_id = '${activeTenantId}'`);
     } else {
       const id = uuidv4();
       query(`INSERT INTO xero_connections (id, tenant_id, org_name, access_token, refresh_token, expires_at) 
-        VALUES ('${id}', '${tenantId}', 'Default Org', '${tokenSet.access_token}', '${tokenSet.refresh_token}', '${expiresAt}')`);
+        VALUES ('${id}', '${activeTenantId}', 'Default Org', '${tokenSet.access_token}', '${tokenSet.refresh_token}', '${expiresAt}')`);
     }
   }
 
@@ -63,7 +65,7 @@ export class XeroService {
       xeroConfig.clientSecret,
       connection[0].refresh_token,
     );
-    await this.saveTokenSet(newTokenSet);
+    await this.saveTokenSet(newTokenSet, tenantId);
     return newTokenSet;
   }
 }
