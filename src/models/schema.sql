@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount DECIMAL(18, 2) NOT NULL,
   currency TEXT NOT NULL,
   description TEXT,
+  type TEXT, -- RECEIVE or SPEND
   status TEXT DEFAULT 'pending',
   account_code TEXT,
   mapping_status TEXT DEFAULT 'unmapped',

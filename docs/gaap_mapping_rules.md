@@ -79,3 +79,13 @@ The agent should use the following priority for categorization:
 
 ### 7.2 Recording
 *   Ensure these are mapped to specific tracking categories or sub-accounts if required for footnote disclosures.
+
+## 8. Intercompany and Suspense Accounts
+
+### 8.1 Intercompany Transfers (Due To/From)
+*   **Rule**: Transfers between linked entities or subsidiaries.
+*   **Action**: Map to "Due To [Entity]" or "Due From [Entity]" current asset/liability accounts. These must eliminate upon consolidation.
+
+### 8.2 Suspense Account
+*   **Rule**: Unidentified receipts or payments where the purpose cannot be determined immediately.
+*   **Action**: Map to "Suspense Account" (Other Current Liability/Asset) temporarily. All items in suspense must be cleared before month-end close.

@@ -74,6 +74,7 @@ export class TransactionService {
     const amount = tx.total;
     const currency = tx.currencyCode;
     const description = (tx.reference || tx.type || '').toString();
+    const type = tx.type; // e.g. RECEIVE or SPEND
     const status =
       (tx.status as unknown as string) === 'DELETED' ? 'deleted' : 'pending';
 
@@ -89,23 +90,24 @@ export class TransactionService {
         amount = ?,
         currency = ?,
         description = ?,
+        type = ?,
         status = ?,
         updated_at = CURRENT_TIMESTAMP
         WHERE xero_transaction_id = ?`,
-        [date, amount, currency, description, status, xeroId]
+        [date, amount, currency, description, type, status, xeroId]
       );
     } else {
       const id = uuidv4();
       query(
-        `INSERT INTO transactions (id, xero_transaction_id, date, amount, currency, description, status) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [id, xeroId, date, amount, currency, description, status]
+        `INSERT INTO transactions (id, xero_transaction_id, date, amount, currency, description, type, status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, xeroId, date, amount, currency, description, type, status]
       );
     }
   }
 
-  static async reconcile(tenantId: string) {
-    const xero = await XeroService.getClient(tenantId);
+  static async reconcile(tenantId: string, xeroClient?: any) {
+    const xero = xeroClient || await XeroService.getClient(tenantId);
 
     // 1. Fetch pending transactions from DB
     const pendingTransactions = query(
@@ -159,6 +161,27 @@ export class TransactionService {
         inv.invoiceNumber === description || inv.reference === description;
 
       if (isExactDate && isExactRef) {
+        // GAAP Check: Duplicate Bill Detection (Rule 4.3)
+        const duplicateCheck = await xero.accountingApi.getInvoices(
+          tenantId,
+          undefined,
+          `AmountDue == 0 AND Total == ${inv.total} AND Contact.ContactID == GUID("${inv.contact?.contactID}") AND Status == "PAID"`
+        );
+        if (duplicateCheck.body.invoices && duplicateCheck.body.invoices.length > 0) {
+          return {
+            transactionId: tx.id,
+            ruleId: 'RULE-4.3-DUPLICATE-BILL-WARNING',
+            confidenceScore: 0.80,
+            matchMetadata: { 
+              invoiceId: inv.invoiceID, 
+              invoiceNumber: inv.invoiceNumber,
+              duplicateOf: duplicateCheck.body.invoices[0].invoiceID 
+            },
+            reasoning: 'Potential duplicate bill detected. An identical bill has already been paid for this vendor.',
+            requiresReview: true,
+          };
+        }
+
         return {
           transactionId: tx.id,
           ruleId: 'RULE-1.1-EXACT-INV',
@@ -168,6 +191,109 @@ export class TransactionService {
           requiresReview: false,
         };
       }
+    }
+
+    // Rule 1.3: Bank Fees (Merchant Charges)
+    // If we didn't find an exact match, check for a slightly higher invoice amount
+    const feeThreshold = amount * 0.05;
+    const feeInvoicesResponse = await xero.accountingApi.getInvoices(
+      tenantId,
+      undefined,
+      `AmountDue > ${amount} AND AmountDue <= ${amount + feeThreshold} AND Status == "AUTHORISED"`,
+    );
+
+    const feeCandidates: Invoice[] = feeInvoicesResponse.body.invoices || [];
+    for (const inv of feeCandidates) {
+      const fee = inv.amountDue! - amount;
+      // Simple pattern match for common merchant fees (Stripe, PayPal)
+      const isMerchant = description.toLowerCase().includes('stripe') || 
+                         description.toLowerCase().includes('paypal') ||
+                         description.toLowerCase().includes('payout');
+      
+      if (isMerchant) {
+        return {
+          transactionId: tx.id,
+          ruleId: 'RULE-1.3-MERCHANT-FEE',
+          confidenceScore: 0.96,
+          matchMetadata: { invoiceId: inv.invoiceID, invoiceNumber: inv.invoiceNumber },
+          reasoning: 'Merchant payout match with automatic fee adjustment.',
+          adjustmentType: 'bank_fee',
+          adjustmentAmount: fee,
+          requiresReview: false,
+        };
+      }
+    }
+
+    // GAAP Check: Fixed Asset Capitalization (Rule 4.1)
+    if (amount >= 2500 && tx.type === 'SPEND') {
+      return {
+        transactionId: tx.id,
+        ruleId: 'RULE-4.1-CAPITALIZATION-REVIEW',
+        confidenceScore: 0.70,
+        reasoning: `Transaction amount (${amount}) exceeds the $2,500 capitalization threshold. Requires Fixed Asset review.`,
+        requiresReview: true,
+      };
+    }
+
+    // GAAP Check: Prepaid Expense (Rule 4.2)
+    const prepaidKeywords = ['insurance', 'annual', 'subscription', 'software', 'membership'];
+    const isPrepaidPotential = amount >= 1200 && tx.type === 'SPEND' && prepaidKeywords.some(k => description.toLowerCase().includes(k));
+    if (isPrepaidPotential) {
+      return {
+        transactionId: tx.id,
+        ruleId: 'RULE-4.2-PREPAID-REVIEW',
+        confidenceScore: 0.75,
+        reasoning: `Potential prepaid expense detected (${amount} and keyword match). Requires amortization review.`,
+        requiresReview: true,
+      };
+    }
+
+    // GAAP Check: Related Party Flagging (Rule 4.4)
+    const relatedPartyKeywords = ['sister', 'brother', 'family', 'owner', 'relative', 'consulting']; // simplistic
+    if (relatedPartyKeywords.some(k => description.toLowerCase().includes(k))) {
+      return {
+        transactionId: tx.id,
+        ruleId: 'RULE-4.4-RELATED-PARTY',
+        confidenceScore: 0.65,
+        reasoning: 'Potential related party transaction detected based on description keywords.',
+        requiresReview: true,
+      };
+    }
+
+    // GAAP Check: Intercompany Transfer (Rule 4.7)
+    const intercompanyKeywords = ['transfer', 'intercompany', 'subsidiary', 'parent company', 'due to'];
+    if (intercompanyKeywords.some(k => description.toLowerCase().includes(k))) {
+        return {
+          transactionId: tx.id,
+          ruleId: 'RULE-4.7-INTERCOMPANY-REVIEW',
+          confidenceScore: 0.70,
+          reasoning: 'Potential intercompany transaction detected. Requires mapping to Due To/From accounts.',
+          requiresReview: true,
+        };
+    }
+
+    // GAAP Check: Deferred Revenue (Rule 4.5)
+    // If it's a large deposit (> $5,000) and no match found yet
+    if (amount >= 5000 && tx.type === 'RECEIVE') {
+        return {
+          transactionId: tx.id,
+          ruleId: 'RULE-4.5-DEFERRED-REVENUE-REVIEW',
+          confidenceScore: 0.60,
+          reasoning: `Large customer deposit (${amount}) with no matching invoice. Requires Deferred Revenue (Unearned) review.`,
+          requiresReview: true,
+        };
+    }
+
+    // GAAP Check: Accrued Liability (Rule 4.6)
+    const accrualKeywords = ['utility', 'power', 'light', 'water', 'internet', 'rent', 'lease'];
+    if (amount >= 300 && tx.type === 'SPEND' && accrualKeywords.some(k => description.toLowerCase().includes(k))) {
+        return {
+          transactionId: tx.id,
+          ruleId: 'RULE-4.6-ACCRUAL-REVIEW',
+          confidenceScore: 0.65,
+          reasoning: `Utility/Recurring payment (${amount}) detected without matching bill. Requires accrual review for period matching.`,
+          requiresReview: true,
+        };
     }
 
     // Rule 2: Close Date Match
@@ -244,11 +370,6 @@ export class TransactionService {
 
     // Rule 3: Multi-Transaction Match (One-to-Many)
     // Search for multiple invoices that sum up to the transaction amount within a 5-day window
-    const windowStart = new Date(txDate);
-    windowStart.setDate(windowStart.getDate() - 5);
-    const windowEnd = new Date(txDate);
-    windowEnd.setDate(windowEnd.getDate() + 5);
-
     const multiInvoicesResponse = await xero.accountingApi.getInvoices(
       tenantId,
       undefined,
@@ -256,8 +377,6 @@ export class TransactionService {
     );
 
     const multiCandidates: Invoice[] = multiInvoicesResponse.body.invoices || [];
-    // Simple greedy approach or exhaustive search for small sets
-    // For now, let's look for pairs as a common case
     for (let i = 0; i < multiCandidates.length; i++) {
       for (let j = i + 1; j < multiCandidates.length; j++) {
         const inv1 = multiCandidates[i];
@@ -276,6 +395,18 @@ export class TransactionService {
           };
         }
       }
+    }
+
+    // Fallback: Suspense Account Flagging (Rule 4.8)
+    // If we've reached here, no match was found.
+    if (tx.type === 'RECEIVE' && amount >= 1000) {
+        return {
+          transactionId: tx.id,
+          ruleId: 'RULE-4.8-SUSPENSE-ACCOUNT',
+          confidenceScore: 0.50,
+          reasoning: `Large unidentified inflow (${amount}). Requires Suspense Account allocation for investigation.`,
+          requiresReview: true,
+        };
     }
 
     return null;

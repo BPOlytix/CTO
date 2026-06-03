@@ -93,3 +93,27 @@ This document specifies the test cases used to validate the accuracy and logic o
 *   **Xero GL Match**: `Bill BILL-900`, `$5,000.00`
 *   **GAAP Reasoning**: Transactions with related parties must be disclosed and scrutinized for arm's-length terms. Identifying these early ensures compliance with disclosure requirements.
 *   **Expected Outcome**: **Flag** (Related Party Disclosure Review).
+
+### Case 4.5: Deferred Revenue (Unearned Revenue)
+*   **Bank Transaction**: `2026-07-15`, `Customer Gold Deposit`, `$10,000.00`
+*   **Xero GL Match**: *No matching invoice found.*
+*   **GAAP Reasoning**: Payment received in advance of services. Under the revenue recognition principle (ASC 606), this must be recorded as a liability (Deferred Revenue) until the performance obligation is satisfied.
+*   **Expected Outcome**: **Flag** (Deferred Revenue Setup Needed).
+
+### Case 4.6: Accrued Liability (Unrecorded Expense)
+*   **Bank Transaction**: `2026-08-05`, `City Power & Light (July)`, `$350.00`
+*   **Xero GL Match**: *No matching bill for July found.*
+*   **GAAP Reasoning**: Matching principle requires expenses to be recorded in the period they were incurred (July). If the bill is missing at month-end, an accrual must be made.
+*   **Expected Outcome**: **Flag** (Accrual Review Needed).
+
+### Case 4.7: Intercompany Transfer
+*   **Bank Transaction**: `2026-08-10`, `Transfer to Accrue UK Ltd`, `$15,000.00`
+*   **Xero GL Match**: *No matching bill found.*
+*   **GAAP Reasoning**: Transfers between related legal entities must be correctly mapped to "Due To/From" accounts on the balance sheet to ensure correct consolidation.
+*   **Expected Outcome**: **Flag** (Intercompany Mapping Needed).
+
+### Case 4.8: Suspense Account Flagging
+*   **Bank Transaction**: `2026-08-15`, `Unknown Inflow REF-999`, `$7,500.00`
+*   **Xero GL Match**: *No matching invoice or contact match found.*
+*   **GAAP Reasoning**: Large unidentified receipts should be temporarily recorded in a Suspense Account while investigation is ongoing, rather than being omitted from the financial records.
+*   **Expected Outcome**: **Flag** (Suspense Account Review).

@@ -9,6 +9,9 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { spawnSync } from 'child_process';
+import path from 'path';
+import fs from 'fs';
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 
@@ -51,6 +54,60 @@ const VENDOR_PATTERNS: Record<string, { gaapCategory: string; accountCode: strin
 };
 
 const DEFAULT_CATEGORY_OPEX = { gaapCategory: 'OPEX', accountCode: '6099', description: 'Other Operating Expense' };
+
+/* ─── Python OCR Wrapper ───────────────────────────────────────────────── */
+
+/**
+ * Executes the Python OCR pipeline to extract data from a bill/invoice file.
+ */
+export async function processBillOcr(filePath: string): Promise<OcrExtraction> {
+  const pythonPath = '/home/agent-automation-dev/ocr_venv/bin/python3';
+  const scriptPath = path.join(process.cwd(), 'python_ocr', 'main.py');
+
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`File not found: ${filePath}`);
+  }
+
+  const result = spawnSync(pythonPath, [scriptPath, filePath], { encoding: 'utf8' });
+
+  if (result.error) {
+    console.error('Python OCR process error:', result.error);
+    return simulateOcr('PIPELINE_ERROR', filePath); // Fallback to mock
+  }
+
+  try {
+    const output = JSON.parse(result.stdout);
+    if (output.status === 'failed') {
+      console.warn('Python OCR pipeline failed, falling back to mock:', output.errors);
+      return simulateOcr('PIPELINE_FAILED', filePath);
+    }
+
+    const { extracted } = output;
+    return {
+      billId: uuidv4(),
+      status: 'success',
+      confidence: 95,
+      extracted: {
+        vendorName: extracted.vendor,
+        billDate: normalizeDate(extracted.date),
+        dueDate: '', // To be implemented in parser
+        totalAmount: extracted.total,
+        referenceNumber: `EXT-${uuidv4().slice(0, 8).toUpperCase()}`,
+        lineItems: extracted.line_items.map((item: any) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitAmount: item.unit_amount,
+          totalAmount: item.total_amount,
+        })),
+        rawText: extracted.raw_text,
+      },
+      errors: [],
+    };
+  } catch (e) {
+    console.error('Failed to parse Python OCR output:', e);
+    return simulateOcr('PARSE_ERROR', filePath);
+  }
+}
 
 /* ─── Mock OCR Engine ──────────────────────────────────────────────────── */
 

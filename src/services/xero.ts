@@ -81,4 +81,48 @@ export class XeroService {
 
     return xero;
   }
+
+  static async createInvoice(tenantId: string, invoiceData: any) {
+    const xero = await this.getClient(tenantId);
+    const response = await xero.accountingApi.createInvoices(tenantId, {
+      invoices: [
+        {
+          type: 'ACCREC',
+          contact: { name: invoiceData.contactName },
+          lineItems: invoiceData.lineItems.map((item: any) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitAmount: item.unitAmount,
+            accountCode: invoiceData.accountCode || '200' // Default Sales
+          })),
+          dueDate: invoiceData.dueDate,
+          status: 'DRAFT'
+        }
+      ]
+    });
+    return response.body.invoices?.[0];
+  }
+
+  static async createBill(tenantId: string, billData: any) {
+    const xero = await this.getClient(tenantId);
+    const response = await xero.accountingApi.createInvoices(tenantId, {
+      invoices: [
+        {
+          type: 'ACCPAY',
+          contact: { name: billData.vendorName },
+          lineItems: [
+            {
+              description: billData.description || 'Bill processing',
+              quantity: 1,
+              unitAmount: billData.amount,
+              accountCode: billData.accountCode || '400' // Default Advertising or similar
+            }
+          ],
+          date: billData.date,
+          status: 'DRAFT'
+        }
+      ]
+    });
+    return response.body.invoices?.[0];
+  }
 }

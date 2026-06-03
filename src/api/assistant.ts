@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { TransactionService } from '../services/transactions.js';
 import { handleBillUpload } from '../services/bill-processing.js';
 import { suggestGaapCategory } from '../services/ocr.js';
+import { XeroService } from '../services/xero.js';
+import { ReportService } from '../services/reports.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
@@ -65,12 +67,22 @@ router.post('/invoice', async (req: Request, res: Response) => {
       });
     }
 
-    // Confirm + Execute (Stubbed)
-    const invoiceId = uuidv4();
+    // Confirm + Execute
+    const invoice = await XeroService.createInvoice(tenantId, {
+      contactName: contact_name,
+      lineItems: line_items.map((item: any) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitAmount: item.unit_amount
+      })),
+      dueDate: due_date,
+      accountCode: account_code
+    });
+
     res.json({
       intent: 'CREATE_INVOICE',
-      message: `Invoice ${invoiceId} created successfully.`,
-      invoiceId,
+      message: `Invoice ${invoice.invoiceID} created successfully.`,
+      invoiceId: invoice.invoiceID,
       confirmed: true
     });
   } catch (error: any) {
@@ -102,13 +114,19 @@ router.post('/bill', async (req: Request, res: Response) => {
     }
 
     // Confirm + Execute
-    // We reuse handleBillUpload or similar logic
-    // For now, let's simulate the result
-    const billId = uuidv4();
+    const mapping = suggestGaapCategory(vendor_name);
+    const bill = await XeroService.createBill(tenantId, {
+      vendorName: vendor_name,
+      amount,
+      date,
+      accountCode: mapping.accountCode,
+      description: mapping.description
+    });
+
     res.json({
       intent: 'PROCESS_BILL',
       message: `Bill from ${vendor_name} recorded successfully.`,
-      billId,
+      billId: bill.invoiceID,
       confirmed: true
     });
   } catch (error: any) {
@@ -138,11 +156,20 @@ router.post('/report', async (req: Request, res: Response) => {
       });
     }
 
-    // Confirm + Execute (Stubbed)
+    // Confirm + Execute
+    let reportData;
+    if (report_type.toUpperCase().includes('PROFIT') || report_type.toUpperCase().includes('P&L')) {
+      reportData = await ReportService.getProfitAndLoss(tenantId);
+    } else if (report_type.toUpperCase().includes('BALANCE')) {
+      reportData = await ReportService.getBalanceSheet(tenantId);
+    } else {
+      throw new Error(`Unsupported report type: ${report_type}`);
+    }
+
     res.json({
       intent: 'GENERATE_REPORT',
       message: `Report ${report_type} for ${period} is ready.`,
-      reportUrl: `https://xero.com/reports/${uuidv4()}`,
+      reportData,
       confirmed: true
     });
   } catch (error: any) {

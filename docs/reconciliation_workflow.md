@@ -11,7 +11,8 @@ The system follows a priority-based matching hierarchy:
 1. **Rule 1: Exact Match** (Highest Confidence)
 2. **Rule 2: Close Date Match**
 3. **Rule 3: Multi-Transaction Match**
-4. **Rule 4: Suggested Match (Needs Review)**
+4. **Rule 4: GAAP Compliance Flags** (Capitalization, Prepaids, Related Parties)
+5. **Rule 5: Suggested Match (Needs Review)**
 
 ## 2. Matching Rules
 
@@ -61,6 +62,15 @@ The system follows a priority-based matching hierarchy:
 
 Any transaction that does not meet the "Auto-Reconcile" thresholds is flagged for "Review Needed".
 
+### 4.1 GAAP Compliance Flags
+*   **Rule 4.1: Fixed Asset Capitalization**: Any spend >= $2,500 is flagged for asset review.
+*   **Rule 4.2: Prepaid Expenses**: Payments >= $1,200 for recurring services (Insurance, Subs) are flagged for amortization.
+*   **Rule 4.4: Related Party Transactions**: Transactions with identified related parties are flagged for disclosure scrutiny.
+*   **Rule 4.5: Deferred Revenue**: Large customer deposits (> $5,000) without invoices are flagged as liabilities.
+*   **Rule 4.6: Accrued Liabilities**: Recurring utility/rent payments without bills are flagged for accrual entries.
+*   **Rule 4.9: Intercompany Transfers**: Transfers between linked entities are flagged for "Due To/From" account mapping.
+
+### 4.2 Discrepancy Handling
 *   **Duplicate Detection**: If multiple GL transactions match one bank line, flag as potential duplicate.
 *   **Missing Transactions**: Bank lines with no matching GL entry after 7 days are flagged for "Bill/Expense Entry Needed".
 
