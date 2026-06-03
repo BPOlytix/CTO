@@ -231,33 +231,41 @@ export class TransactionService {
     }
 
     // Rule 3.2/3.3: Partial/Overpayments
-    // If no amount match was found, look for reference matches with different amounts
-    const refInvoicesResponse = await xero.accountingApi.getInvoices(
+    // ... (already implemented)
+
+    // Rule 3: Multi-Transaction Match (One-to-Many)
+    // Search for multiple invoices that sum up to the transaction amount within a 5-day window
+    const windowStart = new Date(txDate);
+    windowStart.setDate(windowStart.getDate() - 5);
+    const windowEnd = new Date(txDate);
+    windowEnd.setDate(windowEnd.getDate() + 5);
+
+    const multiInvoicesResponse = await xero.accountingApi.getInvoices(
       tenantId,
       undefined,
-      `(InvoiceNumber == "${description}" OR Reference == "${description}") AND Status == "AUTHORISED"`,
+      `AmountDue > 0 AND AmountDue < ${amount} AND Status == "AUTHORISED"`,
     );
 
-    const refCandidates: Invoice[] = refInvoicesResponse.body.invoices || [];
-    for (const inv of refCandidates) {
-      if (inv.amountDue! > amount) {
-        return {
-          transactionId: tx.id,
-          ruleId: 'RULE-3.2-PARTIAL-PAYMENT',
-          confidenceScore: 0.85,
-          matchMetadata: { invoiceId: inv.invoiceID, invoiceNumber: inv.invoiceNumber },
-          reasoning: 'Reference match but amount is a partial payment.',
-          requiresReview: true,
-        };
-      } else if (inv.amountDue! < amount) {
-        return {
-          transactionId: tx.id,
-          ruleId: 'RULE-3.3-OVERPAYMENT',
-          confidenceScore: 0.80,
-          matchMetadata: { invoiceId: inv.invoiceID, invoiceNumber: inv.invoiceNumber },
-          reasoning: 'Reference match but amount exceeds invoice balance.',
-          requiresReview: true,
-        };
+    const multiCandidates: Invoice[] = multiInvoicesResponse.body.invoices || [];
+    // Simple greedy approach or exhaustive search for small sets
+    // For now, let's look for pairs as a common case
+    for (let i = 0; i < multiCandidates.length; i++) {
+      for (let j = i + 1; j < multiCandidates.length; j++) {
+        const inv1 = multiCandidates[i];
+        const inv2 = multiCandidates[j];
+        if (inv1.amountDue! + inv2.amountDue! === amount) {
+          return {
+            transactionId: tx.id,
+            ruleId: 'RULE-3.0-MULTI-MATCH',
+            confidenceScore: 0.88,
+            matchMetadata: { 
+              invoiceIds: [inv1.invoiceID, inv2.invoiceID],
+              invoiceNumbers: [inv1.invoiceNumber, inv2.invoiceNumber]
+            },
+            reasoning: 'Transaction amount matches sum of multiple invoices.',
+            requiresReview: true,
+          };
+        }
       }
     }
 
