@@ -23,7 +23,8 @@ export class XeroService {
 
     // For simplicity, we'll use a fixed ID or lookup by activeTenantId
     const existing = query(
-      `SELECT id FROM xero_connections WHERE tenant_id = '${activeTenantId}'`,
+      'SELECT id FROM xero_connections WHERE tenant_id = ?',
+      [activeTenantId]
     );
 
     const expiresAt = new Date(
@@ -31,22 +32,29 @@ export class XeroService {
     ).toISOString();
 
     if (existing && existing.length > 0) {
-      query(`UPDATE xero_connections SET 
-        access_token = '${tokenSet.access_token}', 
-        refresh_token = '${tokenSet.refresh_token}', 
-        expires_at = '${expiresAt}',
+      query(
+        `UPDATE xero_connections SET 
+        access_token = ?, 
+        refresh_token = ?, 
+        expires_at = ?,
         updated_at = CURRENT_TIMESTAMP
-        WHERE tenant_id = '${activeTenantId}'`);
+        WHERE tenant_id = ?`,
+        [tokenSet.access_token, tokenSet.refresh_token, expiresAt, activeTenantId]
+      );
     } else {
       const id = uuidv4();
-      query(`INSERT INTO xero_connections (id, tenant_id, org_name, access_token, refresh_token, expires_at) 
-        VALUES ('${id}', '${activeTenantId}', 'Default Org', '${tokenSet.access_token}', '${tokenSet.refresh_token}', '${expiresAt}')`);
+      query(
+        `INSERT INTO xero_connections (id, tenant_id, org_name, access_token, refresh_token, expires_at) 
+        VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, activeTenantId, 'Default Org', tokenSet.access_token, tokenSet.refresh_token, expiresAt]
+      );
     }
   }
 
   static async getClient(tenantId: string) {
     const connection = query(
-      `SELECT * FROM xero_connections WHERE tenant_id = '${tenantId}'`,
+      'SELECT * FROM xero_connections WHERE tenant_id = ?',
+      [tenantId]
     );
     if (!connection || connection.length === 0)
       throw new Error('No connection found');
