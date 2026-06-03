@@ -7,7 +7,8 @@ export class TransactionService {
   static async syncTransactions(tenantId: string) {
     const xero = await XeroService.getClient(tenantId);
     const connection = query(
-      `SELECT last_sync_at FROM xero_connections WHERE tenant_id = '${tenantId}'`,
+      'SELECT last_sync_at FROM xero_connections WHERE tenant_id = ?',
+      [tenantId]
     );
     const lastSync = connection[0]?.last_sync_at;
 
@@ -43,7 +44,8 @@ export class TransactionService {
       }
 
       query(
-        `UPDATE xero_connections SET last_sync_at = CURRENT_TIMESTAMP WHERE tenant_id = '${tenantId}'`,
+        'UPDATE xero_connections SET last_sync_at = CURRENT_TIMESTAMP WHERE tenant_id = ?',
+        [tenantId]
       );
       return totalSynced;
     } catch (error: any) {
@@ -65,22 +67,29 @@ export class TransactionService {
       (tx.status as unknown as string) === 'DELETED' ? 'deleted' : 'pending';
 
     const existing = query(
-      `SELECT id FROM transactions WHERE xero_transaction_id = '${xeroId}'`,
+      'SELECT id FROM transactions WHERE xero_transaction_id = ?',
+      [xeroId]
     );
 
     if (existing && existing.length > 0) {
-      query(`UPDATE transactions SET 
-        date = '${date}',
-        amount = ${amount},
-        currency = '${currency}',
-        description = '${description.replace(/'/g, "''")}',
-        status = '${status}',
+      query(
+        `UPDATE transactions SET 
+        date = ?,
+        amount = ?,
+        currency = ?,
+        description = ?,
+        status = ?,
         updated_at = CURRENT_TIMESTAMP
-        WHERE xero_transaction_id = '${xeroId}'`);
+        WHERE xero_transaction_id = ?`,
+        [date, amount, currency, description, status, xeroId]
+      );
     } else {
       const id = uuidv4();
-      query(`INSERT INTO transactions (id, xero_transaction_id, date, amount, currency, description, status) 
-        VALUES ('${id}', '${xeroId}', '${date}', ${amount}, '${currency}', '${description.replace(/'/g, "''")}', '${status}')`);
+      query(
+        `INSERT INTO transactions (id, xero_transaction_id, date, amount, currency, description, status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, xeroId, date, amount, currency, description, status]
+      );
     }
   }
 
