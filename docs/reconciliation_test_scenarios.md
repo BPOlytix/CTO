@@ -65,3 +65,31 @@ This document specifies the test cases used to validate the accuracy and logic o
 *   **Xero GL Match**: *No matching record found.*
 *   **GAAP Reasoning**: Completeness principle. Every bank outflow must have a corresponding ledger entry and supporting document.
 *   **Expected Outcome**: **Flag** (Bill/Expense Entry Needed).
+
+---
+
+## 4. Advanced GAAP & Compliance Scenarios
+
+### Case 4.1: Fixed Asset Capitalization
+*   **Bank Transaction**: `2026-06-22`, `Apple Store`, `$3,200.00`
+*   **Xero GL Match**: *No matching record found.*
+*   **GAAP Reasoning**: The amount exceeds the $2,500 capitalization threshold. Even if it's a "Spend Money" transaction, it should be flagged as a potential Fixed Asset for depreciation rather than being immediately expensed.
+*   **Expected Outcome**: **Flag** (Capitalization Review Needed).
+
+### Case 4.2: Prepaid Expense Threshold
+*   **Bank Transaction**: `2026-07-01`, `State Farm Insurance`, `$1,800.00`
+*   **Xero GL Match**: `Bill BILL-777`, `$1,800.00`
+*   **GAAP Reasoning**: Payment exceeds $1,200 and covers an annual period. Under the matching principle, this should be capitalized as a Prepaid Expense and amortized monthly.
+*   **Expected Outcome**: **Flag** (Prepaid Expense Review).
+
+### Case 4.3: Duplicate Bill Detection
+*   **Bank Transaction**: `2026-07-05`, `Adobe Inc`, `$52.99`
+*   **Xero GL Match**: `Bill BILL-202 (Paid)` AND `Bill BILL-303 (Unpaid)`
+*   **GAAP Reasoning**: Attempting to match a payment to a vendor where an identical bill (same amount/vendor) has already been marked as paid by a different transaction. Risk of double-entry or duplicate payment.
+*   **Expected Outcome**: **Flag** (Duplicate Bill Warning).
+
+### Case 4.4: Related Party Flagging
+*   **Bank Transaction**: `2026-07-10`, `Owner's Sister Consulting`, `$5,000.00`
+*   **Xero GL Match**: `Bill BILL-900`, `$5,000.00`
+*   **GAAP Reasoning**: Transactions with related parties must be disclosed and scrutinized for arm's-length terms. Identifying these early ensures compliance with disclosure requirements.
+*   **Expected Outcome**: **Flag** (Related Party Disclosure Review).

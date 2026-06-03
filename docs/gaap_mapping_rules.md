@@ -70,3 +70,12 @@ The agent should use the following priority for categorization:
     *   *Example*: "AWS" or "Google Cloud" -> G&A: Software Subscriptions.
     *   *Example*: "Landlord Inc" -> G&A: Rent.
 3.  **Threshold Check**: Large purchases (> $2,500) check for Fixed Asset capitalization rules vs immediate expense.
+
+## 7. Related Party Transactions
+
+### 7.1 Identification
+*   **Rule**: Any transaction with a vendor or customer identified as a "Related Party" in the client profile.
+*   **Action**: Flag for human review. Related party transactions require specific disclosure in GAAP financial statements to ensure they are at arm's length.
+
+### 7.2 Recording
+*   Ensure these are mapped to specific tracking categories or sub-accounts if required for footnote disclosures.
