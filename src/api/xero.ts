@@ -1,7 +1,8 @@
-import { Router } from 'express';
+import express from 'express';
 import { XeroService } from '../services/xero.js';
 import { TransactionService } from '../services/transactions.js';
 
+const { Router } = express;
 const router = Router();
 
 router.get('/auth', async (req, res) => {

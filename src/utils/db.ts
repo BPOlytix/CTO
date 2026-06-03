@@ -17,7 +17,12 @@ export function query(sql: string, params: any[] = []): any {
     return param.toString();
   });
 
-  const result = spawnSync('team-db', [formattedSql]).stdout?.toString();
+  const { stdout, stderr, status } = spawnSync('team-db', [formattedSql]);
+  const result = stdout?.toString();
+
+  if (status !== 0) {
+    console.error(`team-db error: ${stderr?.toString()}`);
+  }
 
   if (!result) return [];
 

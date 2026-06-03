@@ -1,9 +1,10 @@
 /**
  * Accrue AI - Bill/Invoice Processing API Routes
  */
-import { Router } from 'express';
+import express from 'express';
 import { handleBillUpload } from '../services/bill-processing.js';
 
+const { Router } = express;
 const router = Router();
 
 /**

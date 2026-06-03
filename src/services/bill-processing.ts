@@ -9,7 +9,7 @@
  */
 
 import { XeroService } from './xero.js';
-import { simulateOcr, suggestGaapCategory, type OcrExtraction } from './ocr.js';
+import { simulateOcr, processBillOcr, suggestGaapCategory, type OcrExtraction } from './ocr.js';
 import { query } from '../utils/db.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -37,17 +37,20 @@ const SUSPENSE_ACCOUNT_CODE = '9999';
 /* ─── Core Processing ──────────────────────────────────────────────────── */
 
 /**
- * Process a bill from raw OCR text through to Xero draft creation.
+ * Process a bill from a file path or raw OCR text through to Xero draft creation.
  */
 export async function processBill(
-  rawText: string,
+  source: string, // Can be rawText OR filePath
   fileReference: string,
   tenantId: string,
+  isFilePath: boolean = false,
 ): Promise<BillProcessingResult> {
   const errors: string[] = [];
 
   // Step 1: Run OCR extraction
-  const ocrResult = simulateOcr(rawText, fileReference);
+  const ocrResult = isFilePath 
+    ? await processBillOcr(source)
+    : simulateOcr(source, fileReference);
 
   if (ocrResult.status === 'failed') {
     return {

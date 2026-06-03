@@ -139,8 +139,6 @@ export class TransactionService {
     const description = tx.description || '';
 
     // Fetch candidate invoices/bills from Xero
-    // Optimization: Filter by amount
-    // Note: In Xero, AmountDue is the remaining balance
     const invoicesResponse = await xero.accountingApi.getInvoices(
       tenantId,
       undefined, // ifModifiedSince
@@ -149,22 +147,19 @@ export class TransactionService {
 
     const candidates: Invoice[] = invoicesResponse.body.invoices || [];
 
-    // Rule 1: Exact Match
+    // Rule 1: Exact Match (Reference or Invoice Number)
     for (const inv of candidates) {
-      const invDate = new Date(inv.date!);
-      const isExactDate =
-        invDate.toISOString().split('T')[0] ===
-        txDate.toISOString().split('T')[0];
       const isExactRef =
-        inv.invoiceNumber === description || inv.reference === description;
+        (inv.invoiceNumber && inv.invoiceNumber === description) || 
+        (inv.reference && inv.reference === description);
 
-      if (isExactDate && isExactRef) {
+      if (isExactRef) {
         return {
           transactionId: tx.id,
           ruleId: 'RULE-1.1-EXACT-INV',
           confidenceScore: 0.99,
           matchMetadata: { invoiceId: inv.invoiceID, invoiceNumber: inv.invoiceNumber },
-          reasoning: 'Exact amount, date, and reference match.',
+          reasoning: 'Exact reference/invoice number match.',
           requiresReview: false,
         };
       }
@@ -178,9 +173,11 @@ export class TransactionService {
       );
 
       if (diffDays <= 3) {
-        const isFuzzyPayee =
-          description.toLowerCase().includes(inv.contact?.name?.toLowerCase() || '') ||
-          (inv.contact?.name?.toLowerCase() || '').includes(description.toLowerCase());
+        const contactName = inv.contact?.name?.toLowerCase();
+        const isFuzzyPayee = contactName && (
+          description.toLowerCase().includes(contactName) ||
+          contactName.includes(description.toLowerCase())
+        );
 
         if (isFuzzyPayee) {
           return {
@@ -189,7 +186,7 @@ export class TransactionService {
             confidenceScore: 0.92,
             matchMetadata: { invoiceId: inv.invoiceID, invoiceNumber: inv.invoiceNumber },
             reasoning: 'Exact amount, date within 3 days, and fuzzy payee match.',
-            requiresReview: false, // Per workflow, >90% can auto-reconcile
+            requiresReview: false,
           };
         }
       }
@@ -203,13 +200,12 @@ export class TransactionService {
         confidenceScore: 0.60,
         matchMetadata: { candidateIds: candidates.map((c) => c.invoiceID) },
         reasoning:
-          'Multiple invoices found with the same amount but no exact date/reference match.',
+          'Multiple invoices found with the same amount but no clear reference/payee match.',
         requiresReview: true,
       };
     }
 
-    // Rule 3.1: Bank Fees (Merchant Charges)
-    // If we didn't find an exact match, check for a slightly higher invoice amount
+    // Rule 1.3: Merchant Fees
     const feeThreshold = amount * 0.05;
     const feeInvoicesResponse = await xero.accountingApi.getInvoices(
       tenantId,
@@ -220,7 +216,6 @@ export class TransactionService {
     const feeCandidates: Invoice[] = feeInvoicesResponse.body.invoices || [];
     for (const inv of feeCandidates) {
       const fee = inv.amountDue! - amount;
-      // Simple pattern match for common merchant fees (Stripe, PayPal)
       const isMerchant = description.toLowerCase().includes('stripe') || 
                          description.toLowerCase().includes('paypal') ||
                          description.toLowerCase().includes('payout');
@@ -239,16 +234,7 @@ export class TransactionService {
       }
     }
 
-    // Rule 3.2/3.3: Partial/Overpayments
-    // ... (already implemented)
-
-    // Rule 3: Multi-Transaction Match (One-to-Many)
-    // Search for multiple invoices that sum up to the transaction amount within a 5-day window
-    const windowStart = new Date(txDate);
-    windowStart.setDate(windowStart.getDate() - 5);
-    const windowEnd = new Date(txDate);
-    windowEnd.setDate(windowEnd.getDate() + 5);
-
+    // Rule 3.0: Multi-Transaction Match (One-to-Many)
     const multiInvoicesResponse = await xero.accountingApi.getInvoices(
       tenantId,
       undefined,
@@ -256,13 +242,11 @@ export class TransactionService {
     );
 
     const multiCandidates: Invoice[] = multiInvoicesResponse.body.invoices || [];
-    // Simple greedy approach or exhaustive search for small sets
-    // For now, let's look for pairs as a common case
     for (let i = 0; i < multiCandidates.length; i++) {
       for (let j = i + 1; j < multiCandidates.length; j++) {
         const inv1 = multiCandidates[i];
         const inv2 = multiCandidates[j];
-        if (inv1.amountDue! + inv2.amountDue! === amount) {
+        if (Math.abs((inv1.amountDue! + inv2.amountDue!) - amount) < 0.01) {
           return {
             transactionId: tx.id,
             ruleId: 'RULE-3.0-MULTI-MATCH',
@@ -276,6 +260,17 @@ export class TransactionService {
           };
         }
       }
+    }
+
+    // Rule 4.1: Fixed Asset Capitalization (Fallback if no match found)
+    if (amount >= 2500) {
+      return {
+        transactionId: tx.id,
+        ruleId: 'RULE-4.1-CAPITALIZATION',
+        confidenceScore: 0.70,
+        reasoning: `Transaction amount (${amount}) exceeds the $2,500 capitalization threshold. Requires Fixed Asset review.`,
+        requiresReview: true,
+      };
     }
 
     return null;
@@ -295,11 +290,17 @@ export class TransactionService {
       agent_id: 'accrue-ai-v1.0.0',
     });
 
-    query(`INSERT INTO bank_reconciliation_logs (id, transaction_id, rule_id, confidence_score, supporting_docs)
-      VALUES ('${logId}', '${transactionId}', '${ruleId}', ${confidenceScore}, '${metadata.replace(/'/g, "''")}')`);
+    query(
+      `INSERT INTO bank_reconciliation_logs (id, transaction_id, rule_id, confidence_score, supporting_docs)
+      VALUES (?, ?, ?, ?, ?)`,
+      [logId, transactionId, ruleId, confidenceScore, metadata]
+    );
 
     // 2. Update transaction status
-    query(`UPDATE transactions SET status = '${status}', updated_at = CURRENT_TIMESTAMP WHERE id = '${transactionId}'`);
+    query(
+      `UPDATE transactions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [status, transactionId]
+    );
     
     console.log(`Reconciled transaction ${transactionId} via ${ruleId} (Status: ${status})`);
   }

@@ -1,10 +1,14 @@
-import { Router, Request, Response } from 'express';
+import express from 'express';
 import { TransactionService } from '../services/transactions.js';
 import { handleBillUpload } from '../services/bill-processing.js';
 import { suggestGaapCategory } from '../services/ocr.js';
 import { v4 as uuidv4 } from 'uuid';
 
+const { Router } = express;
 const router = Router();
+
+type Request = express.Request;
+type Response = express.Response;
 
 /**
  * Handle Bank Reconciliation Intent
