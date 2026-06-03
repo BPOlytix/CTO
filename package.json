@@ -14,8 +14,11 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.6",
+    "@types/luxon": "^3.7.1",
     "@types/node": "^25.9.1",
+    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",
     "eslint": "^10.4.1",
@@ -24,6 +27,13 @@
     "express": "^5.2.1",
     "prettier": "^3.8.3",
     "ts-node": "^10.9.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.1"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "luxon": "^3.7.2",
+    "uuid": "^14.0.0",
+    "xero-node": "^17.0.0"
   }
 }
