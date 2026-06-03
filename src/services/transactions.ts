@@ -2,8 +2,7 @@ import { BankTransaction, Invoice } from 'xero-node';
 import { query } from '../utils/db.js';
 import { XeroService } from './xero.js';
 import { v4 as uuidv4 } from 'uuid';
-import { ReconciliationEngine } from './reconciliation-engine.js';
-import type { ReconciliationMatch } from './reconciliation-engine.js';
+import { reconcile, MatchResult } from './reconciliation.js';
 
 export class TransactionService {
   static async syncTransactions(tenantId: string) {
