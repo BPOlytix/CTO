@@ -25,7 +25,7 @@ export interface BillProcessingResult {
     category: string;
     isCapitalExpenditure: boolean; // > $2,500 threshold
   };
-  xeroDraftId?: string;
+  xeroDraftId: string | undefined;
   errors: string[];
 }
 
@@ -60,6 +60,7 @@ export async function processBill(
         category: 'UNKNOWN',
         isCapitalExpenditure: false,
       },
+      xeroDraftId: undefined,
       errors: [...ocrResult.errors, 'OCR extraction failed - manual entry required'],
     };
   }
@@ -143,14 +144,13 @@ async function createXeroDraftBill(
 
   // Real Xero API call
   const xero = await XeroService.getClient(tenantId);
-  const response = await xero.accountingApi.createPurchaseOrder(
+  const response = await xero.accountingApi.createPurchaseOrders(
     tenantId,
     {
       purchaseOrders: [
         {
           contact: { name: vendorName },
           date: billDate,
-          dueDate: dueDate,
           reference: referenceNumber,
           lineItems: lineItems.map(item => ({
             description: item.description,
@@ -159,7 +159,7 @@ async function createXeroDraftBill(
             accountCode: accountCode,
             lineAmount: item.totalAmount,
           })),
-          statusCode: 'DRAFT',
+          status: 'DRAFT' as any,
         },
       ],
     },
@@ -178,7 +178,7 @@ interface BillLog {
   isCapitalExpenditure: boolean;
   status: string;
   confidence: number;
-  xeroDraftId?: string;
+  xeroDraftId: string | undefined;
 }
 
 function logBillProcessing(log: BillLog): void {

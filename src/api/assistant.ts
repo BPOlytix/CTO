@@ -1,4 +1,5 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import type { Request, Response } from 'express';
 import { TransactionService } from '../services/transactions.js';
 import { handleBillUpload } from '../services/bill-processing.js';
 import { suggestGaapCategory } from '../services/ocr.js';
